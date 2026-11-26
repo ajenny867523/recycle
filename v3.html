@@ -31,6 +31,10 @@
     a-scene {
       touch-action: none;
     }
+    /* 隱藏 A-Frame 1.6 預設右下角 VR/XR 按鈕，避免遮擋廚餘回收桶 */
+    .a-enter-vr, .a-enter-xr, .a-enter-vr-button, .a-enter-ar-button {
+      display: none !important;
+    }
     @keyframes scanPulse {
       0%, 100% { transform: scale(1); opacity: 0.8; }
       50% { transform: scale(1.03); opacity: 1; }
@@ -218,6 +222,7 @@
     mindar-image="imageTargetSrc: ./assets/targets_recycle.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
     renderer="colorManagement: true; toneMapping: ACESFilmic; exposure: 0.58; alpha: true;"
     vr-mode-ui="enabled: false"
+    xr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false"
     loading-screen="enabled: false"
   >
