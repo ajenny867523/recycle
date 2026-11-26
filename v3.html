@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>地球保衛隊｜回收特務 MindAR 圖卡辨識</title>
+  <title>地球保衛隊｜單元三：回收特務 MindAR</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -20,7 +20,8 @@
       height: 100%;
       overflow: hidden;
       background: transparent;
-      font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+      touch-action: none;
+      font-family: 'Noto Sans TC', "Microsoft JhengHei", "PingFang TC", sans-serif;
     }
     a-scene {
       position: fixed;
@@ -31,135 +32,181 @@
       touch-action: none;
     }
     @keyframes scanPulse {
-      0%, 100% { transform: scale(1); opacity: 0.75; }
+      0%, 100% { transform: scale(1); opacity: 0.8; }
       50% { transform: scale(1.03); opacity: 1; }
     }
-    .scan-box {
+    .scanner-frame {
       animation: scanPulse 2s infinite ease-in-out;
+    }
+    @keyframes swipeHint {
+      0% { transform: translateX(-14px); opacity: 0.35; }
+      50% { transform: translateX(14px); opacity: 1; }
+      100% { transform: translateX(-14px); opacity: 0.35; }
+    }
+    .animate-swipe {
+      animation: swipeHint 1.4s infinite ease-in-out;
+    }
+    @keyframes bounceTap {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-6px) scale(1.1); }
+    }
+    .animate-tap {
+      animation: bounceTap 1.1s infinite ease-in-out;
+    }
+    @keyframes shakePhone {
+      0%, 100% { transform: rotate(0deg); }
+      25% { transform: rotate(-18deg); }
+      75% { transform: rotate(18deg); }
+    }
+    .animate-shake {
+      animation: shakePhone 0.5s infinite ease-in-out;
     }
   </style>
 </head>
 <body>
 
-  <!-- 1. 頂部精簡狀態列 -->
-  <header class="fixed top-0 left-0 right-0 z-20 p-2.5 flex flex-col gap-2 pointer-events-none">
-    <div class="flex items-center justify-between bg-slate-900/85 backdrop-blur-md border border-white/15 rounded-2xl px-3.5 py-2 shadow-lg pointer-events-auto">
+  <!-- 1. 頂部狀態與進度導覽 -->
+  <header class="fixed top-0 left-0 right-0 z-20 p-2 sm:p-3 flex flex-col gap-1.5 pointer-events-none">
+    <div class="flex items-center justify-between bg-slate-900/85 backdrop-blur-md border border-white/15 rounded-xl px-3 py-1.5 shadow-lg pointer-events-auto">
       <div class="flex items-center gap-2 min-w-0">
-        <span class="text-xl shrink-0">🛡️</span>
+        <span class="text-lg shrink-0">🛡️</span>
         <div class="truncate">
-          <h1 class="text-sm font-bold text-emerald-400 truncate">回收特務 AR 掃描</h1>
-          <p id="camera-status" class="text-[11px] text-slate-300 truncate">正在載入 3D 模型與圖卡辨識引擎...</p>
+          <h1 class="text-xs sm:text-sm font-bold text-emerald-400 truncate">地球保衛隊｜回收特務 AR</h1>
+          <p id="camera-status" class="text-[10px] text-slate-300 truncate">正在載入 3D 模型與圖卡引擎...</p>
         </div>
       </div>
 
-      <span id="detected-badge" class="px-3 py-1 rounded-xl text-xs font-extrabold bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
-        尚未偵測到圖卡
-      </span>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <span id="detected-badge" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-slate-800 text-slate-300 border border-slate-700">
+          等待掃描圖卡
+        </span>
+        <button id="btn-rescan" onclick="resetToScanMode()"
+          class="hidden px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-700 hover:bg-slate-600 text-white border border-slate-500 transition">
+          🔄 重掃
+        </button>
+      </div>
     </div>
 
-    <!-- 若被嵌入在 Google Sites 等 iframe 導致無法開鏡頭，顯示一鍵獨立開啟提示 -->
+    <!-- iframe 內嵌提醒條 -->
     <div id="iframe-warning-bar" class="hidden pointer-events-auto bg-rose-950/95 border border-rose-400 rounded-xl px-3 py-1.5 flex items-center justify-between gap-2 shadow-lg">
-      <span class="text-[11px] text-rose-100 leading-tight">⚠️ 內嵌網頁可能限制相機權限，請點右側在新分頁開啟：</span>
+      <span class="text-[11px] text-rose-100 leading-tight">⚠️ 內嵌網頁限制相機與感測器，請點右側開啟獨立分頁：</span>
       <a id="btn-open-standalone" href="#" target="_blank" rel="noopener noreferrer"
         class="bg-rose-500 hover:bg-rose-400 text-white font-bold text-[11px] px-2.5 py-1 rounded-lg shrink-0">
         ↗️ 開啟真實相機
       </a>
     </div>
 
-    <!-- 單行引導提示膠囊 -->
-    <div id="status-banner" class="hidden mx-auto bg-slate-900/85 backdrop-blur-md border border-amber-400/70 text-amber-200 text-xs sm:text-sm font-bold px-4 py-1.5 rounded-full shadow-lg text-center max-w-[92%]">
-      🔍 請將鏡頭對準「飲料杯」或「便當盒」照片
+    <!-- 步驟進度條（偵測到圖卡後顯示） -->
+    <div id="step-pills-bar" class="hidden grid grid-cols-4 gap-1 bg-slate-900/80 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow">
+      <div id="step-pill-1" class="flex items-center justify-center py-1 px-1 rounded-lg bg-amber-400 text-slate-950 font-bold text-[11px] transition"></div>
+      <div id="step-pill-2" class="flex items-center justify-center py-1 px-1 rounded-lg bg-slate-800/80 text-slate-400 font-bold text-[11px] transition"></div>
+      <div id="step-pill-3" class="flex items-center justify-center py-1 px-1 rounded-lg bg-slate-800/80 text-slate-400 font-bold text-[11px] transition"></div>
+      <div id="step-pill-4" class="flex items-center justify-center py-1 px-1 rounded-lg bg-slate-800/80 text-slate-400 font-bold text-[11px] transition"></div>
+    </div>
+
+    <!-- 緊湊型任務引導條（偵測到圖卡後顯示） -->
+    <div id="action-guide-banner" class="hidden w-full pointer-events-none">
+      <div class="bg-slate-900/85 backdrop-blur-md border border-amber-400/80 rounded-xl px-3 py-2 shadow-lg flex items-center gap-2.5">
+        <div id="guide-icon" class="text-2xl animate-swipe shrink-0">👉</div>
+        <div class="flex-1 text-left min-w-0">
+          <div id="guide-title" class="text-xs sm:text-sm font-extrabold text-amber-300 truncate"></div>
+          <div id="guide-desc" class="text-[11px] sm:text-xs text-slate-200 leading-snug"></div>
+        </div>
+      </div>
+      <!-- 沖洗進度條 -->
+      <div id="rinse-progress-wrap" class="hidden mt-1.5 bg-slate-900/90 rounded-full p-0.5 border border-sky-400/60">
+        <div class="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
+          <div id="rinse-progress-bar" class="bg-gradient-to-r from-sky-400 to-cyan-300 h-full transition-all duration-150" style="width: 0%"></div>
+        </div>
+      </div>
     </div>
   </header>
 
-  <!-- 2. 掃描準心框（開啟鏡頭後、尚未偵測到任何圖卡時顯示） -->
+  <!-- 2. 掃描準心框（開啟相機後、尚未偵測到圖卡時顯示） -->
   <div id="scanning-reticle" class="hidden fixed inset-0 z-10 pointer-events-none flex flex-col items-center justify-center">
-    <div class="scan-box w-56 h-56 sm:w-64 sm:h-64 border-4 border-dashed border-emerald-400/80 rounded-3xl flex flex-col items-center justify-end p-4 bg-emerald-500/5">
-      <span class="bg-slate-900/80 text-emerald-200 text-xs font-bold px-3 py-1 rounded-full border border-emerald-400/40">
-        請對準飲料杯或便當盒照片
+    <div class="scanner-frame w-56 h-56 sm:w-64 sm:h-64 border-4 border-dashed border-emerald-400/85 rounded-3xl flex flex-col items-center justify-end p-4 bg-emerald-500/5">
+      <span class="bg-slate-900/85 text-emerald-200 text-xs font-bold px-3 py-1.5 rounded-full border border-emerald-400/40 text-center">
+        🔍 請對準「飲料杯」或「便當盒」照片
       </span>
     </div>
   </div>
 
-  <!-- 3. 啟動引導遮罩（啟動前覆蓋） -->
+  <!-- 3. 啟動前引導遮罩 -->
   <div id="start-overlay" class="fixed inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-sm p-6 text-center">
-    <div class="w-56 h-56 border-4 border-dashed border-emerald-400 rounded-3xl flex flex-col items-center justify-center p-4 bg-emerald-500/10 mb-6">
-      <span class="text-5xl mb-3">📷</span>
-      <p class="text-base font-bold text-white">準備啟動圖卡辨識相機</p>
+    <div class="scanner-frame w-56 h-56 sm:w-64 sm:h-64 border-4 border-dashed border-emerald-400 rounded-3xl flex flex-col items-center justify-center p-4 bg-emerald-500/10 mb-5">
+      <span class="text-5xl mb-2">📷</span>
+      <p class="text-base font-bold text-white">對準桌上的垃圾照片圖卡</p>
       <p class="text-xs text-emerald-200 mt-1.5 leading-relaxed">
-        開啟後不會直接顯示模型，<br>需對準「飲料杯」或「便當盒」照片才會出現！
+        開啟後不會直接顯示模型，<br>掃到「飲料杯」或「便當盒」才會出現互動任務！
       </p>
     </div>
 
     <button id="btn-start-ar" disabled onclick="startMindAR()"
-      class="bg-slate-700 text-slate-300 font-extrabold text-base sm:text-lg px-8 py-3.5 rounded-full shadow-2xl transition">
-      ⏳ 模型與辨識資料載入中...
+      class="bg-slate-700 text-slate-300 font-extrabold text-base px-7 py-3 rounded-full shadow-2xl transition">
+      ⏳ 3D 模型與圖卡資料載入中...
     </button>
-    <p id="start-hint" class="text-xs text-slate-400 mt-3 max-w-xs leading-relaxed">
-      提示：請使用 Chrome / Edge / Safari 的 HTTPS 網頁開啟，並確認攝影機未被其他視窗佔用。
+    <p class="text-[11px] text-slate-400 mt-2.5 max-w-xs leading-relaxed">
+      請允許瀏覽器使用「相機」與「動作感測器」權限
     </p>
   </div>
 
-  <!-- 4. 回收小精靈提醒框（步驟順序或分類錯誤時顯示） -->
-  <div id="elf-toast" class="hidden fixed bottom-44 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md">
-    <div class="bg-amber-950/95 border-2 border-amber-400 rounded-2xl p-3.5 shadow-2xl flex items-start gap-3">
+  <!-- 4. 回收小精靈溫和鷹架回饋氣泡 -->
+  <div id="elf-feedback" class="hidden fixed bottom-36 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md transition-all">
+    <div class="bg-amber-950/95 border-2 border-amber-400 rounded-2xl p-3 shadow-2xl flex items-start gap-2.5">
       <span class="text-2xl">🧚</span>
       <div class="flex-1 text-left">
-        <p class="text-xs font-bold text-amber-300">回收小精靈提醒：</p>
-        <p id="elf-text" class="text-xs sm:text-sm text-white font-medium mt-0.5 leading-snug"></p>
+        <p class="text-[11px] font-bold text-amber-300">回收小精靈提醒你：</p>
+        <p id="elf-message" class="text-xs sm:text-sm text-white font-medium mt-0.5 leading-snug"></p>
       </div>
-      <button onclick="closeElfToast()" class="text-amber-300 font-bold text-sm px-1">✕</button>
+      <button onclick="hideElfFeedback()" class="text-amber-300 hover:text-white text-sm font-bold px-1.5">✕</button>
     </div>
   </div>
 
-  <!-- 5. 底部互動按鍵面板（只有在偵測到照片後才會出現！） -->
-  <footer id="controls-panel" class="hidden fixed bottom-0 left-0 right-0 z-20 p-3 sm:p-4 bg-gradient-to-t from-slate-950/95 via-slate-950/85 to-transparent">
-    <div class="max-w-lg mx-auto flex flex-col gap-2.5">
-      <!-- 步驟互動按鍵列（依偵測到的物件動態顯示） -->
-      <div id="action-buttons-grid" class="grid gap-2"></div>
+  <!-- 5. 底部三大分類回收桶（偵測到圖卡後才顯示，供拖曳投入） -->
+  <footer id="bins-container" class="hidden fixed bottom-0 left-0 right-0 z-20 p-3 sm:p-4 bg-gradient-to-t from-slate-950/95 via-slate-950/80 to-transparent pointer-events-none">
+    <p id="bins-hint" class="text-center text-xs text-slate-200 mb-2 font-bold drop-shadow">
+      處理步驟完成後，用手指按住容器「拖曳」進下方分類桶：
+    </p>
+    <div class="grid grid-cols-3 gap-2.5 max-w-xl mx-auto">
+      <div id="bin-general" data-bin="general"
+        class="bin-zone bg-slate-800/90 border-2 border-slate-500 rounded-2xl p-2.5 flex flex-col items-center justify-center transition transform">
+        <span class="text-2xl sm:text-3xl">🗑️</span>
+        <span class="text-xs sm:text-sm font-bold text-slate-200 mt-1">一般垃圾</span>
+        <span class="text-[10px] text-slate-400">封膜 / 吸管</span>
+      </div>
 
-      <!-- 最終分類按鍵列 -->
-      <div class="bg-slate-900/90 border border-slate-700/80 rounded-2xl p-2">
-        <p class="text-[11px] text-slate-300 text-center mb-1.5 font-bold">處理完成後，請按下方分類桶投入：</p>
-        <div class="grid grid-cols-3 gap-2">
-          <button onclick="classifyTo('general')"
-            class="bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-500 rounded-xl py-2 px-1 flex flex-col items-center justify-center transition">
-            <span class="text-lg">🗑️</span>
-            <span class="text-xs font-bold text-slate-200">一般垃圾</span>
-          </button>
+      <div id="bin-recycle" data-bin="recycle"
+        class="bin-zone bg-sky-950/90 border-2 border-sky-400 rounded-2xl p-2.5 flex flex-col items-center justify-center transition transform">
+        <span class="text-2xl sm:text-3xl">♻️</span>
+        <span class="text-xs sm:text-sm font-bold text-sky-300 mt-1">資源回收</span>
+        <span class="text-[10px] text-sky-200/80">乾淨杯 / 紙餐盒</span>
+      </div>
 
-          <button onclick="classifyTo('recycle')"
-            class="bg-sky-950 hover:bg-sky-900 active:scale-95 border border-sky-400 rounded-xl py-2 px-1 flex flex-col items-center justify-center transition">
-            <span class="text-lg">♻️</span>
-            <span class="text-xs font-bold text-sky-300">資源回收</span>
-          </button>
-
-          <button onclick="classifyTo('food')"
-            class="bg-amber-950 hover:bg-amber-900 active:scale-95 border border-amber-500 rounded-xl py-2 px-1 flex flex-col items-center justify-center transition">
-            <span class="text-lg">🍲</span>
-            <span class="text-xs font-bold text-amber-300">廚餘回收</span>
-          </button>
-        </div>
+      <div id="bin-food" data-bin="food"
+        class="bin-zone bg-amber-950/90 border-2 border-amber-500 rounded-2xl p-2.5 flex flex-col items-center justify-center transition transform">
+        <span class="text-2xl sm:text-3xl">🍲</span>
+        <span class="text-xs sm:text-sm font-bold text-amber-300 mt-1">廚餘回收</span>
+        <span class="text-[10px] text-amber-200/80">剩飯菜渣</span>
       </div>
     </div>
   </footer>
 
-  <!-- 6. 完成任務提示視窗 -->
-  <div id="success-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-5">
+  <!-- 6. 通關徽章視窗 -->
+  <div id="badge-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-5">
     <div class="bg-slate-900 border-2 border-emerald-400 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl">
-      <div class="w-20 h-20 mx-auto bg-emerald-400 rounded-full flex items-center justify-center text-4xl shadow-lg mb-3">
+      <div class="w-24 h-24 mx-auto bg-gradient-to-tr from-emerald-400 to-teal-300 rounded-full flex items-center justify-center text-5xl shadow-lg mb-4">
         🏅
       </div>
-      <h2 class="text-xl font-extrabold text-emerald-300">完成觀察與分類！</h2>
-      <p id="success-desc" class="text-sm text-slate-200 mt-2 leading-relaxed"></p>
-      <div class="mt-5 flex flex-col gap-2.5">
-        <button onclick="continueScanning()"
+      <h2 class="text-xl font-extrabold text-emerald-300">任務成功！解鎖「回收特務」徽章</h2>
+      <p id="badge-summary" class="text-sm text-slate-300 mt-2 leading-relaxed"></p>
+      <div class="mt-5 flex flex-col gap-2">
+        <button onclick="scanAnotherCard()"
           class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold py-3 rounded-xl transition">
-          📷 繼續掃描其他照片
+          📷 繼續掃描下一張圖卡
         </button>
-        <button onclick="resetCurrentItem()"
-          class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition">
-          🔄 重設此模型狀態再試一次
+        <button onclick="resetCurrentTask()"
+          class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-sm transition">
+          🔄 重新練習本關
         </button>
       </div>
     </div>
@@ -169,76 +216,97 @@
   <a-scene
     id="ar-scene"
     mindar-image="imageTargetSrc: ./assets/targets_recycle.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
-    renderer="colorManagement: true; alpha: true;"
+    renderer="colorManagement: true; toneMapping: ACESFilmic; exposure: 0.68; alpha: true;"
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false"
     loading-screen="enabled: false"
   >
-    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <a-camera id="ar-camera" position="0 0 0" look-controls="enabled: false">
+      <!-- 拖曳中或短暫偏離鏡頭時的相機空間舞台（確保手指拖進分類桶或搖晃手機時模型不中斷） -->
+      <a-entity id="camera-stage" position="0 0 -1.25"></a-entity>
+    </a-camera>
 
-    <a-entity light="type: ambient; intensity: 1.2"></a-entity>
-    <a-entity light="type: directional; intensity: 1.0" position="1.5 3 2"></a-entity>
+    <!-- 柔和且具立體明暗對比的光源（避免過曝泛白） -->
+    <a-entity light="type: ambient; intensity: 0.35; color: #ffffff"></a-entity>
+    <a-entity light="type: directional; intensity: 0.78; color: #fff8ed" position="1.4 2.5 1.8"></a-entity>
+    <a-entity light="type: directional; intensity: 0.22; color: #cbd5e1" position="-1.8 0.6 1.0"></a-entity>
 
-    <!-- Target 0: 飲料杯照片 (targets飲料.mind) -->
+    <!-- Target 0: 飲料杯照片 (正向直立：rotation 0 0 0) -->
     <a-entity id="target-drink" mindar-image-target="targetIndex: 0">
-      <a-entity id="spin-drink" position="0 -0.15 0.05">
-        <a-entity rotation="70 0 0">
-          <a-entity
-            id="model-drink"
-            gltf-model="url(./assets/drink.glb)"
-            scale="2.6 2.6 2.6"
-          ></a-entity>
-        </a-entity>
+      <a-entity id="anchor-drink" position="0 -0.22 0.05">
+        <a-entity
+          id="model-drink"
+          gltf-model="url(./assets/drink.glb)"
+          position="0 0 0"
+          rotation="0 0 0"
+          scale="2.5 2.5 2.5"
+        ></a-entity>
       </a-entity>
     </a-entity>
 
-    <!-- Target 1: 便當盒照片 (targets便當盒.mind) -->
+    <!-- Target 1: 便當盒照片 (正向朝前、微傾 22° 以便看清盒內菜色) -->
     <a-entity id="target-bento" mindar-image-target="targetIndex: 1">
-      <a-entity id="spin-bento" position="0 -0.15 0.05">
-        <a-entity rotation="70 0 0">
-          <a-entity
-            id="model-bento"
-            gltf-model="url(./assets/bento.glb)"
-            scale="2.2 2.2 2.2"
-          ></a-entity>
-        </a-entity>
+      <a-entity id="anchor-bento" position="0 -0.15 0.05">
+        <a-entity
+          id="model-bento"
+          gltf-model="url(./assets/bento.glb)"
+          position="0 0 0"
+          rotation="22 0 0"
+          scale="2.1 2.1 2.1"
+        ></a-entity>
       </a-entity>
     </a-entity>
   </a-scene>
 
   <script>
+    // =========================================================================
+    // 《地球保衛隊》單元三 MindAR 辨識 + v1 觸控/搖晃互動
+    // =========================================================================
     const sceneEl = document.getElementById('ar-scene');
+    const cameraStageEl = document.getElementById('camera-stage');
     const targetDrinkEl = document.getElementById('target-drink');
     const targetBentoEl = document.getElementById('target-bento');
+    const anchorDrinkEl = document.getElementById('anchor-drink');
+    const anchorBentoEl = document.getElementById('anchor-bento');
     const modelDrinkEl = document.getElementById('model-drink');
     const modelBentoEl = document.getElementById('model-bento');
+
     const startBtn = document.getElementById('btn-start-ar');
     const cameraStatusEl = document.getElementById('camera-status');
     const detectedBadgeEl = document.getElementById('detected-badge');
-    const statusBannerEl = document.getElementById('status-banner');
+    const rescanBtn = document.getElementById('btn-rescan');
     const reticleEl = document.getElementById('scanning-reticle');
-    const controlsPanelEl = document.getElementById('controls-panel');
+    const pillsBarEl = document.getElementById('step-pills-bar');
+    const guideBannerEl = document.getElementById('action-guide-banner');
+    const binsContainerEl = document.getElementById('bins-container');
 
     let sceneLoaded = Boolean(sceneEl.hasLoaded);
     let drinkLoaded = false;
     let bentoLoaded = false;
     let arStarted = false;
     let arStarting = false;
-    let activeItem = null; // null | 'drink' | 'bento'
 
-    // 拆解清洗狀態（跨次辨識保留進度）
-    const itemState = {
-      drink: { filmRemoved: false, strawRemoved: false, washed: false },
-      bento: { foodDumped: false, washed: false }
-    };
+    // 任務狀態
+    let activeTarget = null; // null | 'drink' | 'bento'
+    let isTargetVisible = false;
+    let currentStep = 1;
+    let rinseAmount = 0;
 
-    // 記錄 GLB 內部的子節點與初始位置
+    // 互動手勢狀態
+    let isPointerDown = false;
+    let dragStartPos = { x: 0, y: 0 };
+    let lastPointerPos = { x: 0, y: 0 };
+    let lastShakeDir = 0;
+    let isDraggingModel = false;
+    let isDraggingFood = false;
+
+    // GLB 子節點參照與初始狀態
     const glbParts = {
       drink: { film: null, straw: null, filmInitPos: null, strawInitPos: null },
-      bento: { food: null, foodInitPos: null }
+      bento: { food: null, foodParent: null, foodInitPos: null, foodInitScale: null }
     };
 
-    // 若處於受限 iframe，提示開啟獨立分頁
+    // iframe 偵測
     window.addEventListener('DOMContentLoaded', () => {
       if (window.self !== window.top) {
         const warnBar = document.getElementById('iframe-warning-bar');
@@ -254,10 +322,23 @@
       if (arStarted || arStarting) return;
       if (sceneLoaded && drinkLoaded && bentoLoaded) {
         startBtn.disabled = false;
-        startBtn.className = 'bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950 font-extrabold text-base sm:text-lg px-8 py-3.5 rounded-full shadow-2xl active:scale-95 transition';
-        startBtn.textContent = '🚀 開啟相機開始掃描';
-        cameraStatusEl.textContent = '模型與辨識資料已就緒，請點擊按鈕啟動相機';
+        startBtn.className = 'bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950 font-extrabold text-base px-7 py-3 rounded-full shadow-2xl active:scale-95 transition';
+        startBtn.textContent = '🚀 開啟鏡頭並啟動特務掃描';
+        cameraStatusEl.textContent = '模型與圖卡資料已就緒，請點擊啟動掃描';
       }
+    }
+
+    // 調整材質避免強光過曝，保留清晰的立體感與色塊
+    function tuneMaterials(mesh) {
+      mesh.traverse((obj) => {
+        if (!obj.isMesh || !obj.material) return;
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach((mat) => {
+          mat.metalness = 0.0;
+          mat.roughness = Math.max(mat.roughness ?? 0.55, 0.52);
+          mat.needsUpdate = true;
+        });
+      });
     }
 
     sceneEl.addEventListener('loaded', () => {
@@ -268,6 +349,7 @@
     modelDrinkEl.addEventListener('model-loaded', () => {
       const mesh = modelDrinkEl.getObject3D('mesh');
       if (mesh) {
+        tuneMaterials(mesh);
         glbParts.drink.film = mesh.getObjectByName('Drink_Film');
         glbParts.drink.straw = mesh.getObjectByName('Drink_Straw');
         if (glbParts.drink.film) glbParts.drink.filmInitPos = glbParts.drink.film.position.clone();
@@ -280,28 +362,25 @@
     modelBentoEl.addEventListener('model-loaded', () => {
       const mesh = modelBentoEl.getObject3D('mesh');
       if (mesh) {
+        tuneMaterials(mesh);
         glbParts.bento.food = mesh.getObjectByName('Bento_Food');
-        if (glbParts.bento.food) glbParts.bento.foodInitPos = glbParts.bento.food.position.clone();
+        if (glbParts.bento.food) {
+          glbParts.bento.foodParent = glbParts.bento.food.parent;
+          glbParts.bento.foodInitPos = glbParts.bento.food.position.clone();
+          glbParts.bento.foodInitScale = glbParts.bento.food.scale.clone();
+        }
       }
       bentoLoaded = true;
       checkAllReady();
     });
 
-    modelDrinkEl.addEventListener('model-error', () => {
-      cameraStatusEl.textContent = '❌ 飲料杯 3D 模型載入失敗';
-    });
-    modelBentoEl.addEventListener('model-error', () => {
-      cameraStatusEl.textContent = '❌ 便當盒 3D 模型載入失敗';
-    });
-
-    // MindAR 相機就緒
+    // MindAR 啟動完成
     sceneEl.addEventListener('arReady', () => {
       arStarting = false;
       arStarted = true;
       document.getElementById('start-overlay').classList.add('hidden');
-      statusBannerEl.classList.remove('hidden');
       reticleEl.classList.remove('hidden');
-      cameraStatusEl.textContent = '🟢 AR 相機掃描中（尚未顯示模型）';
+      cameraStatusEl.textContent = '🟢 AR 鏡頭掃描中（請對準圖卡）';
     });
 
     sceneEl.addEventListener('arError', () => {
@@ -319,10 +398,18 @@
         return;
       }
 
+      // 申請手機搖晃加速度感測權限 (iOS 13+)
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try {
+          await DeviceMotionEvent.requestPermission();
+        } catch (e) {}
+      }
+      window.addEventListener('devicemotion', handleDeviceMotion);
+
       arStarting = true;
       startBtn.disabled = true;
       startBtn.textContent = '⏳ 正在開啟攝影機...';
-      cameraStatusEl.textContent = '請允許瀏覽器使用攝影機權限...';
+      cameraStatusEl.textContent = '請允許瀏覽器使用相機與感測器權限...';
 
       try {
         await sceneEl.systems['mindar-image-system'].start();
@@ -332,9 +419,9 @@
         startBtn.textContent = '🔄 重新嘗試啟動相機';
         const errName = err?.name || '';
         if (errName === 'NotAllowedError') {
-          cameraStatusEl.textContent = '❌ 相機權限被拒絕，請在瀏覽器允許相機後重試';
+          cameraStatusEl.textContent = '❌ 相機權限被拒絕，請允許相機後重試';
         } else if (errName === 'NotReadableError') {
-          cameraStatusEl.textContent = '❌ 攝影機可能正被其他網頁/程式佔用中';
+          cameraStatusEl.textContent = '❌ 攝影機可能正被其他視窗/程式佔用中';
         } else {
           cameraStatusEl.textContent = `❌ 相機啟動失敗 (${errName || '未知錯誤'})`;
         }
@@ -342,315 +429,569 @@
     }
 
     // =========================================================================
-    // 圖卡偵測事件：偵測到照片才顯示對應按鈕；離開鏡頭則隱藏按鈕等待掃描
+    // 圖卡偵測與顯示控制（未掃到前完全不顯示模型與介面）
     // =========================================================================
-    targetDrinkEl.addEventListener('targetFound', () => {
-      activeItem = 'drink';
-      reticleEl.classList.add('hidden');
-      controlsPanelEl.classList.remove('hidden');
-      detectedBadgeEl.textContent = '🧋 已偵測：飲料杯';
-      detectedBadgeEl.className = 'px-3 py-1 rounded-xl text-xs font-extrabold bg-emerald-500 text-slate-950 shrink-0';
-      cameraStatusEl.textContent = '🟢 追蹤飲料杯圖卡中';
-      renderControls();
-    });
+    targetDrinkEl.addEventListener('targetFound', () => onTargetFound('drink'));
+    targetBentoEl.addEventListener('targetFound', () => onTargetFound('bento'));
 
     targetDrinkEl.addEventListener('targetLost', () => {
-      if (activeItem === 'drink') {
-        onTargetLost();
-      }
+      if (activeTarget === 'drink') onTargetLost('drink');
     });
-
-    targetBentoEl.addEventListener('targetFound', () => {
-      activeItem = 'bento';
-      reticleEl.classList.add('hidden');
-      controlsPanelEl.classList.remove('hidden');
-      detectedBadgeEl.textContent = '🍱 已偵測：便當盒';
-      detectedBadgeEl.className = 'px-3 py-1 rounded-xl text-xs font-extrabold bg-emerald-500 text-slate-950 shrink-0';
-      cameraStatusEl.textContent = '🟢 追蹤便當盒圖卡中';
-      renderControls();
-    });
-
     targetBentoEl.addEventListener('targetLost', () => {
-      if (activeItem === 'bento') {
-        onTargetLost();
-      }
+      if (activeTarget === 'bento') onTargetLost('bento');
     });
 
-    function onTargetLost() {
-      activeItem = null;
-      controlsPanelEl.classList.add('hidden');
+    function onTargetFound(type) {
+      isTargetVisible = true;
+
+      // 若目前尚未鎖定任務，或切換掃到另一張圖卡且尚未開始互動，啟動該任務
+      if (activeTarget === null) {
+        activeTarget = type;
+        resetStepState(false);
+        showTaskUI(type);
+      }
+
+      if (activeTarget === type) {
+        // 將模型掛回圖卡錨點上（若未處於拖曳中）
+        if (!isDraggingModel) {
+          attachModelToPhoto(type);
+        }
+        cameraStatusEl.textContent = type === 'drink'
+          ? '🟢 已鎖定飲料杯圖卡，請直接在畫面上動手操作'
+          : '🟢 已鎖定便當盒圖卡，請直接在畫面上動手操作';
+      }
+    }
+
+    function onTargetLost(type) {
+      isTargetVisible = false;
+      // 互動進行中若因搖晃手機或向下拖曳導致圖卡暫時離開鏡頭，將模型改掛到相機前方舞台，避免互動中斷！
+      if (activeTarget === type && !isDraggingModel) {
+        attachModelToCameraStage(type, 0, -0.1);
+        cameraStatusEl.textContent = '🟡 暫離圖卡中（可繼續操作，或對準圖卡追蹤）';
+      }
+    }
+
+    function attachModelToPhoto(type) {
+      const modelEl = type === 'drink' ? modelDrinkEl : modelBentoEl;
+      const anchorEl = type === 'drink' ? anchorDrinkEl : anchorBentoEl;
+      if (modelEl.object3D && anchorEl.object3D) {
+        anchorEl.object3D.add(modelEl.object3D);
+        modelEl.object3D.position.set(0, 0, 0);
+        modelEl.object3D.rotation.set(type === 'drink' ? 0 : (22 * Math.PI) / 180, 0, 0);
+      }
+    }
+
+    function attachModelToCameraStage(type, xOffset = 0, yOffset = -0.1) {
+      const modelEl = type === 'drink' ? modelDrinkEl : modelBentoEl;
+      if (modelEl.object3D && cameraStageEl.object3D) {
+        cameraStageEl.object3D.add(modelEl.object3D);
+        modelEl.object3D.position.set(xOffset, yOffset, 0);
+        modelEl.object3D.rotation.set(type === 'drink' ? 0 : (22 * Math.PI) / 180, 0, 0);
+      }
+    }
+
+    function showTaskUI(type) {
+      reticleEl.classList.add('hidden');
+      pillsBarEl.classList.remove('hidden');
+      guideBannerEl.classList.remove('hidden');
+      binsContainerEl.classList.remove('hidden');
+      rescanBtn.classList.remove('hidden');
+
+      detectedBadgeEl.textContent = type === 'drink' ? '🧋 飲料杯任務' : '🍱 便當盒任務';
+      detectedBadgeEl.className = 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-emerald-500 text-slate-950';
+      updateStepUI();
+    }
+
+    function resetToScanMode() {
+      // 復原兩個模型的視覺零件，並回到純掃描等待畫面
+      restoreAllGLBParts();
+      if (activeTarget) {
+        attachModelToPhoto(activeTarget);
+      }
+      activeTarget = null;
+      isTargetVisible = false;
+      isDraggingModel = false;
+      isDraggingFood = false;
+
+      document.getElementById('badge-modal').classList.add('hidden');
+      pillsBarEl.classList.add('hidden');
+      guideBannerEl.classList.add('hidden');
+      binsContainerEl.classList.add('hidden');
+      rescanBtn.classList.add('hidden');
+      hideElfFeedback();
       reticleEl.classList.remove('hidden');
-      closeElfToast();
-      detectedBadgeEl.textContent = '等待對準圖卡';
-      detectedBadgeEl.className = 'px-3 py-1 rounded-xl text-xs font-extrabold bg-slate-800 text-slate-300 border border-slate-700 shrink-0';
-      statusBannerEl.textContent = '🔍 照片離開鏡頭，請重新對準「飲料杯」或「便當盒」照片';
-      cameraStatusEl.textContent = '🟢 AR 相機掃描中（等待圖卡）';
+
+      detectedBadgeEl.textContent = '等待掃描圖卡';
+      detectedBadgeEl.className = 'px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-slate-800 text-slate-300 border border-slate-700';
+      cameraStatusEl.textContent = '🟢 AR 鏡頭掃描中（請對準圖卡）';
     }
-
-    // 單指左右拖曳旋轉目前偵測到的 3D 模型
-    let dragging = false;
-    let lastX = 0;
-    let spinAngles = { drink: 0, bento: 0 };
-
-    window.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('button, a')) return;
-      dragging = true;
-      lastX = e.clientX;
-    });
-    window.addEventListener('pointermove', (e) => {
-      if (!dragging || !activeItem) return;
-      const dx = e.clientX - lastX;
-      lastX = e.clientX;
-      spinAngles[activeItem] = (spinAngles[activeItem] + dx * 0.5) % 360;
-      const spinEl = document.getElementById(activeItem === 'drink' ? 'spin-drink' : 'spin-bento');
-      if (spinEl) {
-        spinEl.setAttribute('rotation', `0 ${spinAngles[activeItem]} 0`);
-      }
-    });
-    window.addEventListener('pointerup', () => {
-      dragging = false;
-    });
 
     // =========================================================================
-    // 動態產生對應物品的操作按鈕
+    // 步驟狀態與 UI 更新 (v1 互動形式)
     // =========================================================================
-    function renderControls() {
-      const grid = document.getElementById('action-buttons-grid');
-      closeElfToast();
+    function getMaxStep() {
+      return activeTarget === 'drink' ? 4 : 3;
+    }
 
-      if (activeItem === 'drink') {
-        const s = itemState.drink;
-        grid.className = 'grid grid-cols-3 gap-2';
-        grid.innerHTML = `
-          <button onclick="doDrinkAction('film')" ${s.filmRemoved ? 'disabled' : ''}
-            class="${s.filmRemoved ? 'bg-emerald-900/60 border-emerald-500/50 text-emerald-300' : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg'} font-extrabold text-xs sm:text-sm py-3 px-2 rounded-xl border transition active:scale-95">
-            ${s.filmRemoved ? '✅ 已撕封膜' : '1. 撕開封膜'}
-          </button>
-          <button onclick="doDrinkAction('straw')" ${s.strawRemoved ? 'disabled' : ''}
-            class="${s.strawRemoved ? 'bg-emerald-900/60 border-emerald-500/50 text-emerald-300' : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg'} font-extrabold text-xs sm:text-sm py-3 px-2 rounded-xl border transition active:scale-95">
-            ${s.strawRemoved ? '✅ 已拔吸管' : '2. 拔出吸管'}
-          </button>
-          <button onclick="doDrinkAction('wash')" ${s.washed ? 'disabled' : ''}
-            class="${s.washed ? 'bg-emerald-900/60 border-emerald-500/50 text-emerald-300' : 'bg-sky-400 hover:bg-sky-300 text-slate-950 shadow-lg'} font-extrabold text-xs sm:text-sm py-3 px-2 rounded-xl border transition active:scale-95">
-            ${s.washed ? '✅ 已清水沖洗' : '3. 清水沖洗'}
-          </button>
-        `;
+    function resetStepState(restoreParts = true) {
+      currentStep = 1;
+      rinseAmount = 0;
+      isDraggingModel = false;
+      isDraggingFood = false;
+      lastShakeDir = 0;
+      document.getElementById('rinse-progress-bar').style.width = '0%';
+      document.getElementById('rinse-progress-wrap').classList.add('hidden');
+      hideElfFeedback();
+      if (restoreParts) restoreAllGLBParts();
+      if (activeTarget) updateStepUI();
+    }
 
-        if (!s.filmRemoved) {
-          statusBannerEl.textContent = '👉 已偵測飲料杯！請先按「1. 撕開封膜」';
-        } else if (!s.strawRemoved) {
-          statusBannerEl.textContent = '👉 再按「2. 拔出吸管」，把吸管抽出來';
-        } else if (!s.washed) {
-          statusBannerEl.textContent = '👉 再按「3. 清水沖洗」，把杯內殘留洗乾淨';
+    function restoreAllGLBParts() {
+      if (glbParts.drink.film) {
+        glbParts.drink.film.visible = true;
+        glbParts.drink.film.rotation.set(0, 0, 0);
+        if (glbParts.drink.filmInitPos) glbParts.drink.film.position.copy(glbParts.drink.filmInitPos);
+      }
+      if (glbParts.drink.straw) {
+        glbParts.drink.straw.visible = true;
+        glbParts.drink.straw.rotation.set(0, 0, 0);
+        if (glbParts.drink.strawInitPos) glbParts.drink.straw.position.copy(glbParts.drink.strawInitPos);
+      }
+      if (glbParts.bento.food && glbParts.bento.foodParent) {
+        glbParts.bento.foodParent.add(glbParts.bento.food);
+        glbParts.bento.food.visible = true;
+        glbParts.bento.food.rotation.set(0, 0, 0);
+        if (glbParts.bento.foodInitPos) glbParts.bento.food.position.copy(glbParts.bento.foodInitPos);
+        if (glbParts.bento.foodInitScale) glbParts.bento.food.scale.copy(glbParts.bento.foodInitScale);
+      }
+    }
+
+    function updateStepUI() {
+      if (!activeTarget) return;
+      const isDrink = activeTarget === 'drink';
+      const labels = isDrink
+        ? ['1. 撕除封膜', '2. 拔出吸管', '3. 左右搖洗', '4. 正確分類']
+        : ['1. 拖曳廚餘', '2. 左右搖洗', '3. 正確分類'];
+
+      pillsBarEl.className = isDrink
+        ? 'grid grid-cols-4 gap-1 bg-slate-900/80 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow'
+        : 'grid grid-cols-3 gap-1 bg-slate-900/80 backdrop-blur-md p-1 rounded-xl border border-white/10 shadow';
+
+      for (let i = 1; i <= 4; i++) {
+        const pill = document.getElementById(`step-pill-${i}`);
+        if (i > labels.length) {
+          pill.classList.add('hidden');
+          continue;
+        }
+        pill.classList.remove('hidden');
+        pill.textContent = labels[i - 1];
+        if (i < currentStep) {
+          pill.className = 'flex items-center justify-center py-1 px-1 rounded-lg bg-emerald-500/90 text-slate-950 font-bold text-[11px] transition';
+        } else if (i === currentStep) {
+          pill.className = 'flex items-center justify-center py-1 px-1 rounded-lg bg-amber-400 text-slate-950 font-extrabold text-[11px] shadow transition';
         } else {
-          statusBannerEl.textContent = '✨ 飲料杯已乾淨！請按下方「♻️ 資源回收」';
+          pill.className = 'flex items-center justify-center py-1 px-1 rounded-lg bg-slate-800/80 text-slate-400 font-bold text-[11px] transition';
         }
-      } else if (activeItem === 'bento') {
-        const s = itemState.bento;
-        grid.className = 'grid grid-cols-2 gap-2';
-        grid.innerHTML = `
-          <button onclick="doBentoAction('food')" ${s.foodDumped ? 'disabled' : ''}
-            class="${s.foodDumped ? 'bg-emerald-900/60 border-emerald-500/50 text-emerald-300' : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg'} font-extrabold text-xs sm:text-sm py-3 px-2 rounded-xl border transition active:scale-95">
-            ${s.foodDumped ? '✅ 已倒廚餘' : '1. 倒掉廚餘'}
-          </button>
-          <button onclick="doBentoAction('wash')" ${s.washed ? 'disabled' : ''}
-            class="${s.washed ? 'bg-emerald-900/60 border-emerald-500/50 text-emerald-300' : 'bg-sky-400 hover:bg-sky-300 text-slate-950 shadow-lg'} font-extrabold text-xs sm:text-sm py-3 px-2 rounded-xl border transition active:scale-95">
-            ${s.washed ? '✅ 已清水沖洗' : '2. 清水沖洗'}
-          </button>
-        `;
+      }
 
-        if (!s.foodDumped) {
-          statusBannerEl.textContent = '👉 已偵測便當盒！請先按「1. 倒掉廚餘」清空飯菜';
-        } else if (!s.washed) {
-          statusBannerEl.textContent = '👉 再按「2. 清水沖洗」，把餐盒油漬洗乾淨';
+      const iconEl = document.getElementById('guide-icon');
+      const titleEl = document.getElementById('guide-title');
+      const descEl = document.getElementById('guide-desc');
+      const rinseWrap = document.getElementById('rinse-progress-wrap');
+      rinseWrap.classList.add('hidden');
+
+      if (isDrink) {
+        if (currentStep === 1) {
+          iconEl.textContent = '👉';
+          iconEl.className = 'text-2xl animate-swipe shrink-0';
+          titleEl.textContent = '任務 1：手動滑動撕開塑膠封膜';
+          descEl.textContent = '用手指在畫面上的杯口封膜「左右滑動」，把綠色封膜撕掉！';
+        } else if (currentStep === 2) {
+          iconEl.textContent = '👆';
+          iconEl.className = 'text-2xl animate-tap shrink-0';
+          titleEl.textContent = '任務 2：手動點擊拔出吸管';
+          descEl.textContent = '直接「點擊」畫面上的綠色吸管，將它抽出來！';
+        } else if (currentStep === 3) {
+          iconEl.textContent = '📳';
+          iconEl.className = 'text-2xl animate-shake shrink-0';
+          titleEl.textContent = '任務 3：左右搖晃手機模擬沖洗';
+          descEl.textContent = '請拿著手機「左右搖晃」（或在杯子上快速左右來回滑動），洗淨殘留！';
+          rinseWrap.classList.remove('hidden');
+        } else if (currentStep === 4) {
+          iconEl.textContent = '♻️';
+          iconEl.className = 'text-2xl animate-bounce shrink-0';
+          titleEl.textContent = '任務 4：手動拖曳飲料杯進分類桶';
+          descEl.textContent = '按住洗乾淨的飲料杯，往下「拖曳」進下方正確的回收分類桶！';
+        }
+      } else {
+        if (currentStep === 1) {
+          iconEl.textContent = '🍲';
+          iconEl.className = 'text-2xl animate-bounce shrink-0';
+          titleEl.textContent = '任務 1：將飯菜廚餘拖曳至廚餘桶';
+          descEl.textContent = '按住便當盒裡的飯菜，往下「拖曳」進右下角的「🍲 廚餘回收」桶！';
+        } else if (currentStep === 2) {
+          iconEl.textContent = '📳';
+          iconEl.className = 'text-2xl animate-shake shrink-0';
+          titleEl.textContent = '任務 2：左右搖晃手機模擬沖洗油漬';
+          descEl.textContent = '請拿著手機「左右搖晃」（或在便當盒上快速左右來回滑動），沖淨油漬！';
+          rinseWrap.classList.remove('hidden');
+        } else if (currentStep === 3) {
+          iconEl.textContent = '♻️';
+          iconEl.className = 'text-2xl animate-bounce shrink-0';
+          titleEl.textContent = '任務 3：手動拖曳便當盒進分類桶';
+          descEl.textContent = '按住洗乾淨的紙便當盒，往下「拖曳」進下方正確的回收分類桶！';
+        }
+      }
+    }
+
+    // =========================================================================
+    // 手勢觸控與 v1 互動判定
+    // =========================================================================
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+
+    function onPointerDown(e) {
+      if (!activeTarget || e.target.closest('button, a')) return;
+      if (!document.getElementById('badge-modal').classList.contains('hidden')) return;
+
+      isPointerDown = true;
+      dragStartPos = { x: e.clientX, y: e.clientY };
+      lastPointerPos = { x: e.clientX, y: e.clientY };
+
+      if (activeTarget === 'drink') {
+        if (currentStep === 2 && glbParts.drink.straw) {
+          isPointerDown = false;
+          animateRemovePart(glbParts.drink.straw, { x: 0.14, y: 0.25, z: 0 }, () => {
+            currentStep = 3;
+            updateStepUI();
+          });
+        } else if (currentStep === 4) {
+          isDraggingModel = true;
+          moveDraggedModelToPointer(e.clientX, e.clientY);
+        }
+      } else if (activeTarget === 'bento') {
+        if (currentStep === 1 && glbParts.bento.food) {
+          isDraggingFood = true;
+          moveDraggedFoodToPointer(e.clientX, e.clientY);
+        } else if (currentStep === 3) {
+          isDraggingModel = true;
+          moveDraggedModelToPointer(e.clientX, e.clientY);
+        }
+      }
+    }
+
+    function onPointerMove(e) {
+      if (!isPointerDown || !activeTarget) return;
+      const dx = e.clientX - dragStartPos.x;
+      const stepDx = e.clientX - lastPointerPos.x;
+      lastPointerPos = { x: e.clientX, y: e.clientY };
+
+      // 飲料杯步驟 1：左右滑動撕除封膜
+      if (activeTarget === 'drink' && currentStep === 1 && Math.abs(dx) > 40) {
+        isPointerDown = false;
+        if (glbParts.drink.film) {
+          animateRemovePart(glbParts.drink.film, { x: dx > 0 ? 0.26 : -0.26, y: 0.12, z: 0 }, () => {
+            currentStep = 2;
+            updateStepUI();
+          });
+        }
+        return;
+      }
+
+      // 便當盒步驟 1：拖曳飯菜廚餘到下方廚餘桶
+      if (activeTarget === 'bento' && currentStep === 1 && isDraggingFood) {
+        moveDraggedFoodToPointer(e.clientX, e.clientY);
+        highlightHoveredBin(e.clientX, e.clientY);
+        return;
+      }
+
+      // 沖洗步驟（飲料杯步驟 3 / 便當盒步驟 2）：快速左右來回滑動模擬清洗
+      const isRinseStep = (activeTarget === 'drink' && currentStep === 3) || (activeTarget === 'bento' && currentStep === 2);
+      if (isRinseStep && Math.abs(stepDx) > 12) {
+        const currentDir = stepDx > 0 ? 1 : -1;
+        if (currentDir !== lastShakeDir) {
+          lastShakeDir = currentDir;
+          triggerRinseProgress(14);
+        }
+      }
+
+      // 最終分類步驟：拖曳整個乾淨容器到下方分類桶
+      if (isDraggingModel) {
+        moveDraggedModelToPointer(e.clientX, e.clientY);
+        highlightHoveredBin(e.clientX, e.clientY);
+      }
+    }
+
+    function onPointerUp(e) {
+      if (!isPointerDown && !isDraggingModel && !isDraggingFood) return;
+
+      // 便當盒步驟 1：檢查廚餘是否丟進「廚餘回收」桶
+      if (activeTarget === 'bento' && currentStep === 1 && isDraggingFood) {
+        const droppedBin = getDroppedBin(e.clientX, e.clientY);
+        clearBinHighlights();
+        if (droppedBin === 'food') {
+          if (glbParts.bento.food) glbParts.bento.food.visible = false;
+          hideElfFeedback();
+          currentStep = 2;
+          updateStepUI();
         } else {
-          statusBannerEl.textContent = '✨ 紙便當盒已乾淨！請按下方「♻️ 資源回收」';
+          restoreDraggedFoodToBox();
+          if (droppedBin === 'recycle') {
+            showElfFeedback('不能把剩飯跟菜渣直接丟進資源回收桶喔！請把廚餘拖曳到右下角的「🍲 廚餘回收」桶！');
+          } else if (droppedBin === 'general') {
+            showElfFeedback('吃剩的飯菜可以回收再利用，請拖曳到右下角的「🍲 廚餘回收」桶，不要丟一般垃圾喔！');
+          } else {
+            showElfFeedback('請按住便當盒裡的飯菜，一路往下拖曳進右下角的「🍲 廚餘回收」桶！');
+          }
+        }
+        isPointerDown = false;
+        isDraggingFood = false;
+        return;
+      }
+
+      // 若前處理步驟尚未完成就直接把模型往下拖，跳出 3D 精靈提醒
+      const maxStep = getMaxStep();
+      if (currentStep < maxStep && isPointerDown) {
+        const dy = e.clientY - dragStartPos.y;
+        if (dy > 90) {
+          triggerMissingStepFeedback();
+        }
+      }
+
+      // 最終分類步驟：判定丟入哪個桶子
+      if (currentStep === maxStep && isDraggingModel) {
+        const handled = checkBinDrop(e.clientX, e.clientY);
+        clearBinHighlights();
+        if (isTargetVisible) {
+          attachModelToPhoto(activeTarget);
+        } else {
+          attachModelToCameraStage(activeTarget, 0, -0.1);
+        }
+        if (!handled) {
+          showElfFeedback('請按住洗乾淨的容器，往下拖曳到下方的分類桶內放開喔！');
+        }
+      }
+
+      isPointerDown = false;
+      isDraggingModel = false;
+      isDraggingFood = false;
+    }
+
+    function screenToStageCoords(clientX, clientY) {
+      const cam = sceneEl.camera;
+      const dist = 1.25;
+      const vFov = ((cam && cam.fov) ? cam.fov : 50) * Math.PI / 180;
+      const visHeight = 2 * Math.tan(vFov / 2) * dist;
+      const aspect = (cam && cam.aspect) ? cam.aspect : (window.innerWidth / window.innerHeight);
+      const visWidth = visHeight * aspect;
+      return {
+        x: (clientX / window.innerWidth - 0.5) * visWidth,
+        y: -(clientY / window.innerHeight - 0.5) * visHeight
+      };
+    }
+
+    // 將整個 3D 容器移到相機前景並跟隨手指位置
+    function moveDraggedModelToPointer(clientX, clientY) {
+      const { x, y } = screenToStageCoords(clientX, clientY);
+      attachModelToCameraStage(activeTarget, x, y);
+    }
+
+    // 將便當盒裡的飯菜（Bento_Food）單獨抽出跟隨手指拖曳
+    function moveDraggedFoodToPointer(clientX, clientY) {
+      const food = glbParts.bento.food;
+      if (!food || !cameraStageEl.object3D) return;
+      cameraStageEl.object3D.add(food);
+      food.scale.set(2.1, 2.1, 2.1);
+      food.rotation.set((22 * Math.PI) / 180, 0, 0);
+      const { x, y } = screenToStageCoords(clientX, clientY);
+      food.position.set(x, y, 0.05);
+    }
+
+    function restoreDraggedFoodToBox() {
+      const food = glbParts.bento.food;
+      const parent = glbParts.bento.foodParent;
+      if (!food || !parent) return;
+      parent.add(food);
+      food.rotation.set(0, 0, 0);
+      if (glbParts.bento.foodInitPos) food.position.copy(glbParts.bento.foodInitPos);
+      if (glbParts.bento.foodInitScale) food.scale.copy(glbParts.bento.foodInitScale);
+    }
+
+    function getDroppedBin(x, y) {
+      let droppedBin = null;
+      document.querySelectorAll('.bin-zone').forEach((bin) => {
+        const rect = bin.getBoundingClientRect();
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          droppedBin = bin.dataset.bin;
+        }
+      });
+      return droppedBin;
+    }
+
+    function highlightHoveredBin(x, y) {
+      document.querySelectorAll('.bin-zone').forEach((bin) => {
+        const rect = bin.getBoundingClientRect();
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          bin.classList.add('scale-105', 'ring-4', 'ring-white');
+        } else {
+          bin.classList.remove('scale-105', 'ring-4', 'ring-white');
+        }
+      });
+    }
+
+    function clearBinHighlights() {
+      document.querySelectorAll('.bin-zone').forEach((bin) => {
+        bin.classList.remove('scale-105', 'ring-4', 'ring-white');
+      });
+    }
+
+    function checkBinDrop(x, y) {
+      const droppedBin = getDroppedBin(x, y);
+      if (!droppedBin) return false;
+
+      if (droppedBin === 'recycle') {
+        showBadgeModal();
+      } else if (droppedBin === 'general') {
+        showElfFeedback('咦？我們已經把殘留物清除，而且也沖洗乾淨了！現在它是乾淨的「資源回收物」，不是一般垃圾喔！');
+      } else if (droppedBin === 'food') {
+        showElfFeedback('廚餘桶只能放吃剩的食物喔！塑膠杯和紙餐盒洗乾淨後，應該要放進「資源回收桶」才對！');
+      }
+      return true;
+    }
+
+    function triggerMissingStepFeedback() {
+      const isDrink = activeTarget === 'drink';
+      if (isDrink) {
+        if (currentStep === 1) {
+          showElfFeedback('先別急著丟！杯口上還黏著塑膠封膜，請先左右滑動把封膜撕下來！');
+        } else if (currentStep === 2) {
+          showElfFeedback('塑膠吸管還插在杯子上呢！請先點擊把吸管拔出來，才能分開回收喔！');
+        } else if (currentStep === 3) {
+          showElfFeedback('杯底還有殘留的飲料茶漬，直接回收會發臭長蟲！請先左右搖晃手機（或來回滑動）沖洗乾淨喔！');
+        }
+      } else {
+        if (currentStep === 1) {
+          showElfFeedback('便當盒裡還有剩飯和菜渣！請先按住飯菜拖曳進「🍲 廚餘回收」桶，避免污染回收物！');
+        } else if (currentStep === 2) {
+          showElfFeedback('便當盒還油膩膩的！請先左右搖晃手機（或來回滑動）模擬沖洗油漬，再放進資源回收桶喔！');
         }
       }
     }
 
-    // 執行飲料杯 GLB 部位動畫
-    function doDrinkAction(action) {
-      const s = itemState.drink;
-      if (action === 'film' && !s.filmRemoved) {
-        s.filmRemoved = true;
-        animatePartFlyOut(glbParts.drink.film, { x: 0.25, y: 0.14, z: 0 });
-      } else if (action === 'straw' && !s.strawRemoved) {
-        s.strawRemoved = true;
-        animatePartFlyOut(glbParts.drink.straw, { x: 0.12, y: 0.25, z: 0 });
-      } else if (action === 'wash' && !s.washed) {
-        if (!s.filmRemoved) {
-          showElfToast('杯口還黏著封膜，水沖不進去喔！請先按「1. 撕開封膜」！');
-          return;
-        }
-        s.washed = true;
-        animateRinse(modelDrinkEl);
+    // =========================================================================
+    // 搖晃手機沖洗 + 水花特效
+    // =========================================================================
+    function handleDeviceMotion(event) {
+      if (!activeTarget) return;
+      const isRinseStep = (activeTarget === 'drink' && currentStep === 3) || (activeTarget === 'bento' && currentStep === 2);
+      if (!isRinseStep) return;
+
+      const acc = event.acceleration && event.acceleration.x !== null
+        ? event.acceleration
+        : event.accelerationIncludingGravity;
+      if (!acc) return;
+
+      const lateralForce = Math.abs(acc.x || 0);
+      if (lateralForce > 8.5) {
+        triggerRinseProgress(10);
       }
-      renderControls();
     }
 
-    // 執行便當盒 GLB 部位動畫
-    function doBentoAction(action) {
-      const s = itemState.bento;
-      if (action === 'food' && !s.foodDumped) {
-        s.foodDumped = true;
-        animatePartFlyOut(glbParts.bento.food, { x: 0.22, y: -0.15, z: 0.1 });
-      } else if (action === 'wash' && !s.washed) {
-        if (!s.foodDumped) {
-          showElfToast('餐盒裡還有剩飯菜渣！請先按「1. 倒掉廚餘」，再用水沖洗喔！');
-          return;
-        }
-        s.washed = true;
-        animateRinse(modelBentoEl);
+    function triggerRinseProgress(amount) {
+      const isDrink = activeTarget === 'drink';
+      const expectedStep = isDrink ? 3 : 2;
+      if (currentStep !== expectedStep) return;
+
+      rinseAmount = Math.min(100, rinseAmount + amount);
+      document.getElementById('rinse-progress-bar').style.width = `${rinseAmount}%`;
+
+      const modelEl = isDrink ? modelDrinkEl : modelBentoEl;
+      if (modelEl.object3D) {
+        modelEl.object3D.rotation.z = (Math.random() - 0.5) * 0.45;
+        spawnWaterSplash(modelEl.object3D);
       }
-      renderControls();
+
+      if (rinseAmount >= 100) {
+        if (modelEl.object3D) modelEl.object3D.rotation.z = 0;
+        currentStep = expectedStep + 1;
+        updateStepUI();
+      }
     }
 
-    function animatePartFlyOut(obj, offset) {
-      if (!obj) return;
-      let p = 0;
-      const start = obj.position.clone();
+    function spawnWaterSplash(parentObj) {
+      const THREE = AFRAME.THREE;
+      const dropGeo = new THREE.SphereGeometry(0.008, 8, 8);
+      const dropMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+
+      for (let i = 0; i < 6; i++) {
+        const drop = new THREE.Mesh(dropGeo, dropMat);
+        drop.position.set(
+          (Math.random() - 0.5) * 0.14,
+          0.1 + Math.random() * 0.08,
+          (Math.random() - 0.5) * 0.14
+        );
+        let vy = 0.014 + Math.random() * 0.012;
+        parentObj.add(drop);
+
+        const anim = setInterval(() => {
+          drop.position.y += vy;
+          vy -= 0.003;
+          if (drop.position.y < -0.05) {
+            clearInterval(anim);
+            parentObj.remove(drop);
+          }
+        }, 25);
+      }
+    }
+
+    function animateRemovePart(obj, targetOffset, onComplete) {
+      if (!obj) {
+        if (onComplete) onComplete();
+        return;
+      }
+      let progress = 0;
+      const startPos = obj.position.clone();
       const timer = setInterval(() => {
-        p += 0.08;
-        obj.position.x = start.x + offset.x * p;
-        obj.position.y = start.y + offset.y * p;
-        obj.position.z = start.z + offset.z * p;
-        obj.rotation.z += 0.18;
-        if (p >= 1) {
+        progress += 0.08;
+        obj.position.x = startPos.x + targetOffset.x * progress;
+        obj.position.y = startPos.y + targetOffset.y * progress;
+        obj.rotation.z += 0.15;
+        if (progress >= 1) {
           clearInterval(timer);
           obj.visible = false;
+          if (onComplete) onComplete();
         }
       }, 16);
     }
 
-    function animateRinse(targetEntity) {
-      const THREE = AFRAME.THREE;
-      const obj3d = targetEntity.object3D;
-      if (!obj3d) return;
-
-      let p = 0;
-      const drops = [];
-      const dropGeo = new THREE.SphereGeometry(0.012, 8, 8);
-      const dropMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-
-      const timer = setInterval(() => {
-        p += 0.06;
-        obj3d.rotation.z = Math.sin(p * 26) * 0.2;
-
-        // 產生水花粒子
-        for (let i = 0; i < 3; i++) {
-          const d = new THREE.Mesh(dropGeo, dropMat);
-          d.position.set(
-            (Math.random() - 0.5) * 0.22,
-            0.22 + Math.random() * 0.1,
-            (Math.random() - 0.5) * 0.22
-          );
-          d.userData.vy = 0.015 + Math.random() * 0.01;
-          obj3d.add(d);
-          drops.push(d);
-        }
-
-        for (let i = drops.length - 1; i >= 0; i--) {
-          drops[i].position.y += drops[i].userData.vy;
-          drops[i].userData.vy -= 0.004;
-          if (drops[i].position.y < -0.05) {
-            obj3d.remove(drops[i]);
-            drops.splice(i, 1);
-          }
-        }
-
-        if (p >= 1) {
-          clearInterval(timer);
-          obj3d.rotation.z = 0;
-          drops.forEach(d => obj3d.remove(d));
-        }
-      }, 25);
+    function showElfFeedback(msg) {
+      document.getElementById('elf-message').textContent = msg;
+      document.getElementById('elf-feedback').classList.remove('hidden');
     }
 
-    // 分類桶判定
-    function classifyTo(binType) {
-      if (activeItem === 'drink') {
-        const s = itemState.drink;
-        if (!s.filmRemoved) {
-          showElfToast('杯口上還黏著塑膠封膜，請先按「1. 撕開封膜」喔！');
-          return;
-        }
-        if (!s.strawRemoved) {
-          showElfToast('塑膠吸管還插在杯子上，請先按「2. 拔出吸管」分開回收！');
-          return;
-        }
-        if (!s.washed) {
-          showElfToast('杯底還有殘留飲料漬，請先按「3. 清水沖洗」洗乾淨再分類！');
-          return;
-        }
-        if (binType === 'recycle') {
-          showSuccess('太棒了！你成功辨識飲料杯圖卡，完成「撕封膜、拔吸管、清水沖洗」並投入資源回收桶！');
-        } else if (binType === 'general') {
-          showElfToast('這是洗乾淨的塑膠飲料杯，屬於「♻️ 資源回收」，不是一般垃圾喔！');
-        } else {
-          showElfToast('塑膠杯不是食物，不能放進廚餘桶喔！請按「♻️ 資源回收」！');
-        }
-      } else if (activeItem === 'bento') {
-        const s = itemState.bento;
-        if (!s.foodDumped) {
-          showElfToast('便當盒裡還有剩飯和菜渣！請先按「1. 倒掉廚餘」，不能直接丟回收桶喔！');
-          return;
-        }
-        if (!s.washed) {
-          showElfToast('紙餐盒還油膩膩的！請先按「2. 清水沖洗」洗乾淨再回收喔！');
-          return;
-        }
-        if (binType === 'recycle') {
-          showSuccess('太厲害了！你成功辨識便當盒圖卡，把廚餘倒乾淨並沖洗油漬，正確放進「♻️ 資源回收桶」！');
-        } else if (binType === 'food') {
-          showElfToast('廚餘已經倒乾淨了，紙餐盒本身要放進「♻️ 資源回收」桶喔！');
-        } else {
-          showElfToast('洗乾淨的紙便當盒是可以循環再造的「♻️ 資源回收物」，不要丟一般垃圾喔！');
-        }
+    function hideElfFeedback() {
+      document.getElementById('elf-feedback').classList.add('hidden');
+    }
+
+    function showBadgeModal() {
+      const isDrink = activeTarget === 'drink';
+      document.getElementById('badge-summary').textContent = isDrink
+        ? '你成功辨識飲料杯圖卡，手動完成拆封膜、拔吸管、沖洗並投入資源回收桶！'
+        : '你成功辨識便當盒圖卡，手動完成清廚餘、沖洗油漬並投入資源回收桶！';
+      document.getElementById('badge-modal').classList.remove('hidden');
+    }
+
+    function scanAnotherCard() {
+      resetToScanMode();
+    }
+
+    function resetCurrentTask() {
+      document.getElementById('badge-modal').classList.add('hidden');
+      resetStepState(true);
+      if (isTargetVisible && activeTarget) {
+        attachModelToPhoto(activeTarget);
       }
-    }
-
-    function showElfToast(msg) {
-      document.getElementById('elf-text').textContent = msg;
-      document.getElementById('elf-toast').classList.remove('hidden');
-    }
-
-    function closeElfToast() {
-      document.getElementById('elf-toast').classList.add('hidden');
-    }
-
-    function showSuccess(desc) {
-      document.getElementById('success-desc').textContent = desc;
-      document.getElementById('success-modal').classList.remove('hidden');
-    }
-
-    function continueScanning() {
-      document.getElementById('success-modal').classList.add('hidden');
-    }
-
-    function resetCurrentItem() {
-      document.getElementById('success-modal').classList.add('hidden');
-      if (activeItem === 'drink') {
-        itemState.drink = { filmRemoved: false, strawRemoved: false, washed: false };
-        if (glbParts.drink.film) {
-          glbParts.drink.film.visible = true;
-          glbParts.drink.film.rotation.set(0, 0, 0);
-          if (glbParts.drink.filmInitPos) glbParts.drink.film.position.copy(glbParts.drink.filmInitPos);
-        }
-        if (glbParts.drink.straw) {
-          glbParts.drink.straw.visible = true;
-          glbParts.drink.straw.rotation.set(0, 0, 0);
-          if (glbParts.drink.strawInitPos) glbParts.drink.straw.position.copy(glbParts.drink.strawInitPos);
-        }
-      } else if (activeItem === 'bento') {
-        itemState.bento = { foodDumped: false, washed: false };
-        if (glbParts.bento.food) {
-          glbParts.bento.food.visible = true;
-          glbParts.bento.food.rotation.set(0, 0, 0);
-          if (glbParts.bento.foodInitPos) glbParts.bento.food.position.copy(glbParts.bento.foodInitPos);
-        }
-      }
-      renderControls();
     }
 
     window.addEventListener('pagehide', () => {
